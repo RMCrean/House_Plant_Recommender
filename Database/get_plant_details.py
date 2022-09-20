@@ -1,13 +1,11 @@
 """
-This script scrapes the missouribotanicalgarden.org webpages using the links
-previously identified through the google searches (and then some follow up
-manual curation).
+This script scrapes missouribotanicalgarden.org webpages for specific plants
+By using the links previously generated with the google search API,
+as well as some manual curation.
 
-After extracting information for each available plant the results are saved
+After extracting information for each plant the results are then saved
 to the SQL database for later use.
 """
-
-
 import re
 import requests
 from typing import Tuple
@@ -15,7 +13,6 @@ from time import sleep
 from bs4 import BeautifulSoup
 import pandas as pd
 import sqlite3
-
 
 DATABASE_LOC = r"C:\Users\Rory Crean\Dropbox (lkgroup)\Backup_HardDrive\Postdoc\PyForFun\House_Plant_Recommender\Database\house_plants.db"
 
@@ -195,7 +192,7 @@ def extract_all_plant_info(plant_with_link: dict) -> pd.DataFrame:
         "Zones", "Native_Range",
         "Heights", "Spreads",
         "Bloom_Times", "Bloom_Description",
-        "sunlight", "Watering", "Maintenance",
+        "Sunlight", "Watering", "Maintenance",
         "Flowers", "Leafs", "Fruits"
     ]
 
@@ -245,7 +242,7 @@ if __name__ == '__main__':
         Spreads VARCHAR (80),
         Bloom_Times VARCHAR (100),
         Bloom_Description VARCHAR (200),
-        sunlight VARCHAR (100),
+        Sunlight VARCHAR (100),
         Watering VARCHAR (60),
         Maintenance VARCHAR (50),
         Flowers VARCHAR (100),
