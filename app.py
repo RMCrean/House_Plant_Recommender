@@ -41,12 +41,13 @@ hr_styles = {"v1": {"border": "2px lightgray solid"}, "v2": {
 
 ################## text blocks ##################
 subtitle_text = "Because you can never have enough houseplants..."
-placeholder_text = "Monstera deliciosa is currently selected, start typing to add another plant."
+placeholder_text = """Results for \"Plerandra elegantissima\" are currently shown,
+start typing to add a plant (or plants!) of your choosing."""
 
 dropdown_explain_text = """
 The selected plants will be used to generate the recommendations shown below.
-If you select two or more plants, the recommendations will be based on
-
+If you select two or more plants, the recommendations will be for the combination
+(each plant will be equally weighted).
 """
 
 ################## load in data ##################
@@ -61,9 +62,6 @@ c = conn.cursor()
 plant_df = pd.read_sql_query("SELECT * FROM plant_raw_data", conn)
 print(plant_df.head(3))
 
-# for the search dropdown callback.
-plant_search_options = [{"label": x, "value": x}
-                        for x in list(plant_df["Plant_Name"])]
 
 # For the scatter plots
 df_plotting = pd.read_sql_query("SELECT * FROM plotting", conn)
@@ -85,18 +83,25 @@ cosine_sim = np.asarray(json.loads(raw_cosine_sim[0][1]))
 c.close()
 
 
-# # test
-# top_plants = utils.recommend_plant(
-#     df=plant_df,
-#     plants_selected="Monstera deliciosa",
-#     cosine_sim=cosine_sim)
+################## data preprocessing ##################
 
-# # print(plant_df[top_plants[0]])
+# for the search dropdown callback.
 
-# print(plant_df[plant_df["Plant_Name"].isin(["Monstera deliciosa"])])
+# Old version - works but can't search common names as well.
+# plant_search_options = [{"label": x, "value": x}
+#                         for x in list(plant_df["Plant_Name"])]
 
+common_names = list(plant_df["Common_Names"])
+common_names_fixed = [names.replace(",", ", ") for names in common_names]
 
-################## preprocessing data ##################
+# New version, allows for searching of any common name too.
+# Not the prettiest presenation though.
+plant_search_options = []
+for plant, plant_common_names in zip(list(plant_df["Plant_Name"]), common_names_fixed):
+    plant_search_options.append(
+        {"label": str(plant + ", Commonly known as: " + plant_common_names),
+         "value": plant}
+    )
 
 
 ################## App layout ##################
@@ -136,7 +141,7 @@ app.layout = dbc.Container([
             html.P(dropdown_explain_text),
             dcc.Dropdown(
                 id="dropdown-plant-select", multi=True, clearable=True,
-                value="Monstera deliciosa", options=plant_search_options,
+                value="Plerandra elegantissima", options=plant_search_options,
                 placeholder=placeholder_text,
             ),
         ], style={"justify-content": "left"}, className="mb-2"),
@@ -270,6 +275,25 @@ app.layout = dbc.Container([
 
 ##################  Callbacks ##################
 
+
+# # dropdown-plant-select
+@app.callback(
+    dash.dependencies.Output("dropdown-plant-select", "options"),
+    [dash.dependencies.Input("dropdown-plant-select", "search_value")],
+    [dash.dependencies.State("dropdown-plant-select", "value")],
+)
+def dynamic_dropdown_options(search_value, value):
+    """
+    Callback for "dropdown-plant-select" with case insensitive search enabled.
+
+    """
+    if not search_value:
+        raise PreventUpdate
+    # Make sure that the set values are in the option list, else they will disappear
+    # from the shown select list, but still part of the `value`.
+    return [o for o in plant_search_options if search_value.upper() in o["label"].upper() or o["value"] in (value or [])]
+
+
 # Update each of the recommendation cards...
 @app.callback(
     [
@@ -353,23 +377,6 @@ def give_recommendations(plant_selection):
 
 
 #
-
-# dropdown-plant-select
-@app.callback(
-    dash.dependencies.Output("dropdown-plant-select", "options"),
-    [dash.dependencies.Input("dropdown-plant-select", "search_value")],
-    [dash.dependencies.State("dropdown-plant-select", "value")],
-)
-def update_multi_options(search_value, value):
-    """
-    Callback for "dropdown-plant-select" with case insensitive search enabled.
-
-    """
-    if not search_value:
-        raise PreventUpdate
-    # Make sure that the set values are in the option list, else they will disappear
-    # from the shown select list, but still part of the `value`.
-    return [o for o in plant_search_options if search_value.upper() in o["label"].upper() or o["value"] in (value or [])]
 
 
 # Update scatter graph callback
