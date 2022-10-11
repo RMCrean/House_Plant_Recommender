@@ -34,7 +34,7 @@ SUBSET_START = 0
 SUBSET_END = 95
 
 
-def get_blomsterlandet_plants(url: str) -> set:
+def get_blomsterlandet_plants(url: str) -> list:
     """
     Using the website: https://www.blomsterlandet.se to identify all the houseplants they have available
     on a given product page. Specifically extracts the latin name assinged to each product.
@@ -48,7 +48,7 @@ def get_blomsterlandet_plants(url: str) -> set:
     Returns
     -------
     set
-        All scientific names of each plant, stored as set to avoid duplication.
+        The scientific names of each plant.
     """
     r = requests.get(url)
     soup = BeautifulSoup(r.content, 'lxml')
