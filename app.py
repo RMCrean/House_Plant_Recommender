@@ -15,6 +15,7 @@ import dash_core_components as dcc
 import dash_html_components as html
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
+from dash.exceptions import PreventUpdate
 
 import utils
 
@@ -42,6 +43,11 @@ hr_styles = {"v1": {"border": "2px lightgray solid"}, "v2": {
 subtitle_text = "Because you can never have enough houseplants..."
 placeholder_text = "Monstera deliciosa is currently selected, start typing to add another plant."
 
+dropdown_explain_text = """
+The selected plants will be used to generate the recommendations shown below.
+If you select two or more plants, the recommendations will be based on
+
+"""
 
 ################## load in data ##################
 DATABASE_LOC = r"Database\house_plants.db"
@@ -55,7 +61,9 @@ c = conn.cursor()
 plant_df = pd.read_sql_query("SELECT * FROM plant_raw_data", conn)
 print(plant_df.head(3))
 
-print(plant_df.columns)
+# for the search dropdown callback.
+plant_search_options = [{"label": x, "value": x}
+                        for x in list(plant_df["Plant_Name"])]
 
 # For the scatter plots
 df_plotting = pd.read_sql_query("SELECT * FROM plotting", conn)
@@ -124,13 +132,11 @@ app.layout = dbc.Container([
     # Row2 - enter plant name.
     dbc.Row([
         dbc.Col([
-            html.H5("Select which plants you want to study"),
+            html.H5("Select the plant(s) you want to Generate Recommendations from"),
+            html.P(dropdown_explain_text),
             dcc.Dropdown(
-                # TODO make multi=True possible.
-                id="dropdown-plant-select", multi=False, value="Monstera deliciosa",
-                options=[
-                    {"label": "Monstera deliciosa", "value": "Monstera deliciosa"},
-                    {"label": "Aechmea ", "value": "Aechmea "}, ],
+                id="dropdown-plant-select", multi=True, clearable=True,
+                value="Monstera deliciosa", options=plant_search_options,
                 placeholder=placeholder_text,
             ),
         ], style={"justify-content": "left"}, className="mb-2"),
@@ -140,7 +146,7 @@ app.layout = dbc.Container([
     # Row4 - Subtitle for recommendations
     dbc.Row([
         dbc.Col([
-            html.H3("The Top 6 Recommendations Based on your Selected Plant",
+            html.H3("The Top 6 Recommendations Based on your Selected Plant(s)",
                     className="text-center text-primary mb-4"),
 
         ], width=12),
@@ -163,22 +169,28 @@ app.layout = dbc.Container([
     #
     dbc.Row([
         dbc.Col(dbc.Card([], id="recommend_card_1",
-                color="primary", outline=True)),
+                         color="primary", outline=True),
+                xs=12, sm=12, md=6, lg=4, xl=4, className="mb-2"),
         dbc.Col(dbc.Card([], id="recommend_card_2",
-                color="primary", outline=True)),
+                         color="primary", outline=True),
+                xs=12, sm=12, md=6, lg=4, xl=4, className="mb-2"),
         dbc.Col(dbc.Card([], id="recommend_card_3",
-                color="primary", outline=True)),
-    ]),
+                         color="primary", outline=True),
+                xs=12, sm=12, md=6, lg=4, xl=4, className="mb-2"),
+    ], justify="center"),
 
     # Row7 - recommendations, 2nd row.
     dbc.Row([
         dbc.Col(dbc.Card([], id="recommend_card_4",
-                color="primary", outline=True)),
+                         color="primary", outline=True),
+                xs=12, sm=12, md=6, lg=4, xl=4, className="mb-2"),
         dbc.Col(dbc.Card([], id="recommend_card_5",
-                color="primary", outline=True)),
+                         color="primary", outline=True),
+                xs=12, sm=12, md=6, lg=4, xl=4, className="mb-2"),
         dbc.Col(dbc.Card([], id="recommend_card_6",
-                color="primary", outline=True)),
-    ]),
+                         color="primary", outline=True),
+                xs=12, sm=12, md=6, lg=4, xl=4, className="mb-2"),
+    ], justify="center"),
 
     dbc.Row([
         html.Br()
@@ -189,7 +201,8 @@ app.layout = dbc.Container([
     # New row - dialog buttons to control the scatter plot.
     dbc.Row([
         dbc.Col([
-            html.H4("See how all the different houseplants compare"),
+            html.H4("See how all the different houseplants compare",
+                    className="text-center"),
             # Add explanation on how taken above features to use scatter plot.
 
             # Move this into the graph controls
@@ -257,7 +270,7 @@ app.layout = dbc.Container([
 
 ##################  Callbacks ##################
 
-# Update each of the recommended cards...
+# Update each of the recommendation cards...
 @app.callback(
     [
         Output("recommend_card_1", "children"),
@@ -276,15 +289,13 @@ def give_recommendations(plant_selection):
     find top 6 plants to recommend.
 
     # TODO - do some kind of explainer on each feature.
+    # TODO - max card height as % of screen size...
 
     """
     top_plants = utils.recommend_plants(
         plant_df=plant_df,
         plants_selected=plant_selection,
         cosine_sim=cosine_sim)
-
-    # later convert to for loop, with list.
-    # list idx indicates card idx...
 
     all_plant_details = []
     for plant_name in top_plants:
@@ -302,16 +313,17 @@ def give_recommendations(plant_selection):
             dbc.CardHeader(top_plants[idx],
                            className="card-title text-center"),
             dbc.CardImg(src=plant_details['image_path']),
-            html.P(f"Image obtained from: {plant_details['image_source']}",
-                   className="card-text text-right font-italic"),
+            dbc.CardBody([
+                html.P(f"Image obtained from: {plant_details['image_source']}",
+                       className="card-text text-right font-italic"),
+                html.P(
+                    f"Commonly known as: {plant_details['common_names']}",
+                    className="card-text"),
+            ]),
 
             dbc.CardBody(
                 [
                     html.H5("Plant Details", className="card-title text-center"),
-                    html.P(f"Commonly known as: {plant_details['common_names']}",
-                           className="card-text",
-                           ),
-
                     dbc.ListGroup([
                         dbc.ListGroupItem(
                             f"Maintenance: {plant_details['maintenance']}"),
@@ -330,7 +342,7 @@ def give_recommendations(plant_selection):
                             f"Flowers: {plant_details['flowers']}"),
                         dbc.ListGroupItem(
                             f"Fruits: {plant_details['fruits']}"),
-                    ], flush=True),
+                    ], className="card-text", flush=True),
                 ]
             ),
         ]
@@ -338,6 +350,26 @@ def give_recommendations(plant_selection):
         all_card_content.append(card_content)
 
     return all_card_content
+
+
+#
+
+# dropdown-plant-select
+@app.callback(
+    dash.dependencies.Output("dropdown-plant-select", "options"),
+    [dash.dependencies.Input("dropdown-plant-select", "search_value")],
+    [dash.dependencies.State("dropdown-plant-select", "value")],
+)
+def update_multi_options(search_value, value):
+    """
+    Callback for "dropdown-plant-select" with case insensitive search enabled.
+
+    """
+    if not search_value:
+        raise PreventUpdate
+    # Make sure that the set values are in the option list, else they will disappear
+    # from the shown select list, but still part of the `value`.
+    return [o for o in plant_search_options if search_value.upper() in o["label"].upper() or o["value"] in (value or [])]
 
 
 # Update scatter graph callback
