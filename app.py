@@ -55,6 +55,8 @@ c = conn.cursor()
 plant_df = pd.read_sql_query("SELECT * FROM plant_raw_data", conn)
 print(plant_df.head(3))
 
+print(plant_df.columns)
+
 # For the scatter plots
 df_plotting = pd.read_sql_query("SELECT * FROM plotting", conn)
 # print(df_plotting.head(3))
@@ -135,16 +137,16 @@ app.layout = dbc.Container([
     ]),
 
 
-    # Row4 - Subtitle for Recomendations
+    # Row4 - Subtitle for recommendations
     dbc.Row([
         dbc.Col([
-            html.H3("Recommendations based on your selected plant",
+            html.H3("The Top 6 Recommendations Based on your Selected Plant",
                     className="text-center text-primary mb-4"),
 
         ], width=12),
     ]),
 
-    # Row5 - Options for filtering recomendations.
+    # Row5 - Options for filtering recommendations.
     dbc.Row([
         dbc.Col([
 
@@ -157,32 +159,40 @@ app.layout = dbc.Container([
     # gives fruits.
 
 
-    # Row6 - Recomendations, 1st row.
+    # Row6 - recommendations, 1st row.
     #
     dbc.Row([
-        dbc.Col(dbc.Card([], id="recomend_card_1",
+        dbc.Col(dbc.Card([], id="recommend_card_1",
                 color="primary", outline=True)),
-        dbc.Col(dbc.Card([], id="recomend_card_2",
+        dbc.Col(dbc.Card([], id="recommend_card_2",
                 color="primary", outline=True)),
-        dbc.Col(dbc.Card([], id="recomend_card_3",
+        dbc.Col(dbc.Card([], id="recommend_card_3",
                 color="primary", outline=True)),
     ]),
 
-    # Row7 - Recomendations, 2nd row.
+    # Row7 - recommendations, 2nd row.
     dbc.Row([
-        dbc.Col(dbc.Card([], id="recomend_card_4",
+        dbc.Col(dbc.Card([], id="recommend_card_4",
                 color="primary", outline=True)),
-        dbc.Col(dbc.Card([], id="recomend_card_5",
+        dbc.Col(dbc.Card([], id="recommend_card_5",
                 color="primary", outline=True)),
-        dbc.Col(dbc.Card([], id="recomend_card_6",
+        dbc.Col(dbc.Card([], id="recommend_card_6",
                 color="primary", outline=True)),
     ]),
+
+    dbc.Row([
+        html.Br()
+    ]),
+
 
 
     # New row - dialog buttons to control the scatter plot.
     dbc.Row([
         dbc.Col([
-            html.H4("Choose the graph axes"),
+            html.H4("See how all the different houseplants compare"),
+            # Add explanation on how taken above features to use scatter plot.
+
+            # Move this into the graph controls
             dbc.RadioItems(
                 options=[
                     {"label": "Seperate by everything!",
@@ -248,9 +258,16 @@ app.layout = dbc.Container([
 ##################  Callbacks ##################
 
 # Update each of the recommended cards...
-
 @app.callback(
-    Output("recomend_card_1", "children"),
+    [
+        Output("recommend_card_1", "children"),
+        Output("recommend_card_2", "children"),
+        Output("recommend_card_3", "children"),
+        Output("recommend_card_4", "children"),
+        Output("recommend_card_5", "children"),
+        Output("recommend_card_6", "children"),
+
+    ],
     Input("dropdown-plant-select", "value"),
 )
 def give_recommendations(plant_selection):
@@ -258,38 +275,69 @@ def give_recommendations(plant_selection):
     Uses the cosine similarity matrix and user selected plants to
     find top 6 plants to recommend.
 
+    # TODO - do some kind of explainer on each feature.
+
     """
-    top_plants = utils.recommend_plant(
-        df=plant_df,
+    top_plants = utils.recommend_plants(
+        plant_df=plant_df,
         plants_selected=plant_selection,
         cosine_sim=cosine_sim)
 
-    # later just: top_plants
-    top_df = plant_df[plant_df["Plant_Name"].isin(list(top_plants[0]))]
+    # later convert to for loop, with list.
+    # list idx indicates card idx...
 
-    card_content = [
-        dbc.CardHeader(top_plants[0]),
-        dbc.CardImg(src=app.get_asset_url("Adenium_obesum.jpg")),
-        # add link to webpage....
-        # Need to move images to assets folder instead.
-        dbc.CardBody(
-            [
-                html.H5("Card title", className="card-title"),
-                html.P(
-                    "This is some card content that we'll reuse",
-                    className="card-text",
-                ),
+    all_plant_details = []
+    for plant_name in top_plants:
+        all_plant_details.append(
+            utils.get_plant_details(
+                plant_name=plant_name,
+                plant_df=plant_df,
+                image_df=image_df
+            )
+        )
 
-                dbc.ListGroup([
-                    dbc.ListGroupItem("Item 1"),
-                    dbc.ListGroupItem("Item 2"),
-                    dbc.ListGroupItem("Item 3"),
-                ], flush=True),
-            ]
-        ),
-    ]
+    all_card_content = []
+    for idx, plant_details in enumerate(all_plant_details):
+        card_content = [
+            dbc.CardHeader(top_plants[idx],
+                           className="card-title text-center"),
+            dbc.CardImg(src=plant_details['image_path']),
+            html.P(f"Image obtained from: {plant_details['image_source']}",
+                   className="card-text text-right font-italic"),
 
-    return card_content
+            dbc.CardBody(
+                [
+                    html.H5("Plant Details", className="card-title text-center"),
+                    html.P(f"Commonly known as: {plant_details['common_names']}",
+                           className="card-text",
+                           ),
+
+                    dbc.ListGroup([
+                        dbc.ListGroupItem(
+                            f"Maintenance: {plant_details['maintenance']}"),
+                        dbc.ListGroupItem(
+                            f"Sunlight Requirements: {plant_details['sunlight']}"),
+                        dbc.ListGroupItem(
+                            f"Watering Requirements: {plant_details['watering']}"),
+                        dbc.ListGroupItem(
+                            f"Type of Plant: {plant_details['types']}"),
+                        dbc.ListGroupItem(
+                            f"Height Range: {plant_details['heights']}"),
+                        dbc.ListGroupItem(
+                            f"Spread Range: {plant_details['spreads']}"),
+                        dbc.ListGroupItem(f"Zones: {plant_details['zones']}"),
+                        dbc.ListGroupItem(
+                            f"Flowers: {plant_details['flowers']}"),
+                        dbc.ListGroupItem(
+                            f"Fruits: {plant_details['fruits']}"),
+                    ], flush=True),
+                ]
+            ),
+        ]
+
+        all_card_content.append(card_content)
+
+    return all_card_content
 
 
 # Update scatter graph callback
