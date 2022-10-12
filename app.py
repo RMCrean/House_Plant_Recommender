@@ -3,16 +3,16 @@ Main Dash application.
 To run locally simply do "python app.py" and visit: http://127.0.0.1:8050/ in your web browser.
 """
 import json
-from logging import PlaceHolder
 import sqlite3
+from typing import Tuple
 import pandas as pd
 import numpy as np
 
-import plotly.express as px
 import plotly.graph_objects as go
 import dash
-import dash_core_components as dcc
-import dash_html_components as html
+from dash import html
+from dash import dcc
+
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
@@ -60,7 +60,7 @@ c = conn.cursor()
 
 # main df of info.
 plant_df = pd.read_sql_query("SELECT * FROM plant_raw_data", conn)
-print(plant_df.head(3))
+# print(plant_df.head(3))
 
 
 # For the scatter plots
@@ -91,13 +91,21 @@ c.close()
 # plant_search_options = [{"label": x, "value": x}
 #                         for x in list(plant_df["Plant_Name"])]
 
+
 common_names = list(plant_df["Common_Names"])
 common_names_fixed = [names.replace(",", ", ") for names in common_names]
 
+common_names_show = []
+for names in common_names_fixed:
+    first_few_names = names.split(",")[0:5]
+    common_names_show.append(",".join(first_few_names))
+
 # New version, allows for searching of any common name too.
 # Not the prettiest presenation though.
+# Set alphabetical order for dropdown.
+
 plant_search_options = []
-for plant, plant_common_names in zip(list(plant_df["Plant_Name"]), common_names_fixed):
+for plant, plant_common_names in zip(list(plant_df["Plant_Name"]), common_names_show):
     plant_search_options.append(
         {"label": str(plant + ", Commonly known as: " + plant_common_names),
          "value": plant}
@@ -141,11 +149,26 @@ app.layout = dbc.Container([
             html.P(dropdown_explain_text),
             dcc.Dropdown(
                 id="dropdown-plant-select", multi=True, clearable=True,
-                value="Plerandra elegantissima", options=plant_search_options,
-                placeholder=placeholder_text,
+                options=plant_search_options, placeholder=placeholder_text,
+                value="Plerandra elegantissima",
             ),
-        ], style={"justify-content": "left"}, className="mb-2"),
+        ], xs=12, sm=12, md=8, lg=6, xl=6,  style={"justify-content": "left"}, className="mb-2"),
+
+        dbc.Col(dbc.Card([], id="plant_card_p1",
+                         color="primary", outline=True),
+                xs=12, sm=12, md=4, lg=3, xl=3, className="mb-2"),
+
+        dbc.Col(dbc.Card([], id="plant_card_p2",
+                         color="primary", outline=True),
+                xs=12, sm=12, md=6, lg=3, xl=3, className="mb-2"),
+
     ]),
+
+    # Row4
+    dbc.Row([
+        html.Hr(style=hr_styles["v2"]),
+    ]),
+
 
 
     # Row4 - Subtitle for recommendations
@@ -294,6 +317,68 @@ def dynamic_dropdown_options(search_value, value):
     return [o for o in plant_search_options if search_value.upper() in o["label"].upper() or o["value"] in (value or [])]
 
 
+@app.callback(
+    [Output("plant_card_p1", "children"),
+     Output("plant_card_p2", "children")],
+    Input("dropdown-plant-select", "value"),
+)
+def make_plant_card(plant_selection: Tuple[str, list]):
+    """
+    Makes the plant card that shows the user what plant they have selected.
+
+    """
+    # only show the last selected plant.
+    if isinstance(plant_selection, str):
+        plant_name = plant_selection
+    else:
+        plant_name = str(plant_selection[-1])
+
+    plant_details = utils.get_plant_details(
+        plant_name=plant_name, plant_df=plant_df, image_df=image_df)
+
+    card_content_p1 = [
+        dbc.Button(f"Last Selected Plant: {plant_name}",
+                   color="primary", className="me-1"),
+        dbc.CardImg(src=plant_details['image_path']),
+        dbc.CardBody([
+            html.P(f"Image obtained from: {plant_details['image_source']}",
+                   className="card-text text-right font-italic"),
+            html.P(
+                f"Commonly known as: {plant_details['common_names']}",
+                className="card-text"),
+        ]),
+    ]
+
+    card_content_p2 = [
+        dbc.Button("Plant Details", color="primary", className="me-1"),
+        dbc.CardBody(
+            [
+                dbc.ListGroup([
+                    dbc.ListGroupItem(
+                        f"Maintenance: {plant_details['maintenance']}"),
+                    dbc.ListGroupItem(
+                        f"Sunlight Requirements: {plant_details['sunlight']}"),
+                    dbc.ListGroupItem(
+                        f"Watering Requirements: {plant_details['watering']}"),
+                    dbc.ListGroupItem(
+                        f"Type of Plant: {plant_details['types']}"),
+                    dbc.ListGroupItem(
+                        f"Height Range: {plant_details['heights']}"),
+                    dbc.ListGroupItem(
+                        f"Spread Range: {plant_details['spreads']}"),
+                    dbc.ListGroupItem(f"Zones: {plant_details['zones']}"),
+                    dbc.ListGroupItem(
+                        f"Flowers: {plant_details['flowers']}"),
+                    dbc.ListGroupItem(
+                        f"Fruits: {plant_details['fruits']}"),
+                ], className="card-text", flush=True),
+            ]
+        ),
+    ]
+
+    return card_content_p1, card_content_p2
+
+
 # Update each of the recommendation cards...
 @app.callback(
     [
@@ -313,7 +398,7 @@ def give_recommendations(plant_selection):
     find top 6 plants to recommend.
 
     # TODO - do some kind of explainer on each feature.
-    # TODO - max card height as % of screen size...
+    can use: https://dash-bootstrap-components.opensource.faculty.ai/docs/components/tooltip/
 
     """
     top_plants = utils.recommend_plants(
@@ -334,8 +419,8 @@ def give_recommendations(plant_selection):
     all_card_content = []
     for idx, plant_details in enumerate(all_plant_details):
         card_content = [
-            dbc.CardHeader(top_plants[idx],
-                           className="card-title text-center"),
+            dbc.Button(
+                f"Number {(idx + 1)}: {top_plants[idx]}", color="primary", className="me-1"),
             dbc.CardImg(src=plant_details['image_path']),
             dbc.CardBody([
                 html.P(f"Image obtained from: {plant_details['image_source']}",
@@ -345,12 +430,20 @@ def give_recommendations(plant_selection):
                     className="card-text"),
             ]),
 
+
             dbc.CardBody(
                 [
                     html.H5("Plant Details", className="card-title text-center"),
                     dbc.ListGroup([
+                        dbc.Button("Click",
+                                   id="click-target",
+                                   color="danger",
+                                   className="me-1",
+                                   n_clicks=0,
+                                   ),
                         dbc.ListGroupItem(
                             f"Maintenance: {plant_details['maintenance']}"),
+
                         dbc.ListGroupItem(
                             f"Sunlight Requirements: {plant_details['sunlight']}"),
                         dbc.ListGroupItem(
