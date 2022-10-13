@@ -24,15 +24,18 @@ import utils
 # https://hellodash.pythonanywhere.com/theme_explorer
 app = dash.Dash(
     __name__,
-    external_stylesheets=[
-        dbc.themes.MINTY],
+    external_stylesheets=[dbc.themes.MINTY],
     # these meta_tags ensure content is scaled correctly on different devices
     # see: https://www.w3schools.com/css/css_rwd_viewport.asp for more
     meta_tags=[{"name": "viewport",
                 "content": "width=device-width, initial-scale=1"}],
+    suppress_callback_exceptions=True  # https://dash.plotly.com/advanced-callbacks
 )
 
 banner_color = {"background-color": "#DEDEDE"}
+
+content_style = {"margin-left": "2rem",
+                 "margin-right": "2rem", "margin-top": "0.5rem"}
 
 # horizontal rule styles.
 hr_styles = {"v1": {"border": "2px lightgray solid"}, "v2": {
@@ -40,15 +43,108 @@ hr_styles = {"v1": {"border": "2px lightgray solid"}, "v2": {
 
 
 ################## text blocks ##################
-subtitle_text = "Because you can never have enough houseplants..."
+subtitle_text = "  Because you can never have enough houseplants..."
 placeholder_text = """Results for \"Plerandra elegantissima\" are currently shown,
-start typing to add a plant (or plants!) of your choosing."""
+start typing to add a plant."""
 
-dropdown_explain_text = """
-The selected plants will be used to generate the recommendations shown below.
-If you select two or more plants, the recommendations will be for the combination
-(each plant will be equally weighted).
+info_button_text = "Click here for an explanation of each term used"
+
+dropdown_explain_text = html.P([
+    html.P("""
+    The selected plants will be used to generate the recommendations shown below.
+    If you select two or more plants, the recommendations will be made based on all plants seletected,
+    with each plant will be equally weighted).
+    """),
+
+    html.P("You can search for your plant either by it's latin name or some of its common names. "),
+
+    html.P("You can either start typing or click the down arrow on the search box to see all available plants."),
+])
+
+
+faq_title_1 = "What is this App?"
+faq_text_1 = html.P(
+    """This app lets you """
+)
+
+faq_title_2 = "How does it decide what to recommend?"
+faq_text_2 = html.P(
+    """This app lets you """
+)
+
+
+faq_title_3 = "I can't find my plant?"
+faq_text_3 = html.P(
+    """
+As you can imagine there are a lot of houseplants out there, and this database
+is made up of 147 plants, so many are missing.
+This depends on many things....
+
 """
+)
+
+
+faq_title_4 = "How did you obtain this data?"
+faq_text_4 = html.P([
+
+    "The following websites/APIs were used in order to obtain the required data to make this webpage:",
+
+    html.Li([
+        html.A("Blomsterlandet:",
+               href="https://www.blomsterlandet.se", target="_blank"),
+        """
+        The house plants available to purchase from Blomsterlandet were obtained via
+        web-scraping. In this case I extracted the latin name of each houseplant possible
+        to purchase.
+        """,
+        html.A("You can see the script I used to do this by clicking here.",
+               href="https://github.com/RMCrean/House_Plant_Recommender/blob/main/Database/generate_database.py", target="_blank"),
+    ]),
+
+    html.Li([
+        html.A("Missouri Botanical Garden:",
+               href="https://www.missouribotanicalgarden.org/", target="_blank"),
+        """
+        The database of information available on this website was used
+        """
+    ]),
+
+    html.Li([
+        html.A("Google's Custom Search API:",
+               href="https://developers.google.com/custom-search/v1/overview", target="_blank"),
+        """
+        The search API was used towards two things:
+        (1) to search for each plant's web link in the Missouri Botanical Garden database.
+        (2) to make automated google image searches for each plant in the database
+        """,
+        html.A("click here to see the script I used for this",
+               href="https://github.com/RMCrean/House_Plant_Recommender/blob/main/Database/get_plant_images.py",
+               target="_blank"),
+
+
+    ]),
+
+    html.Li(""),
+
+])
+
+
+faq_title_5 = ""
+faq_text_5 = html.P("blah")
+
+
+faq_title_6 = "I Have a Comment/Suggestion/Issue"
+
+faq_text_6 = html.P([
+    "All comments, suggestions, issues etc... are very welcome on the app's ",
+    html.A("Github repository",
+           href="https://github.com/RMCrean/House_Plant_Recommender", target="_blank"),
+    ". You can also contact me via ",
+    html.A("LinkedIn", href="https://www.linkedin.com/in/rory-crean/",
+           target="_blank"),
+    " if you prefer. Thank you for taking a look at my web app."
+])
+
 
 ################## load in data ##################
 DATABASE_LOC = r"Database\house_plants.db"
@@ -60,24 +156,17 @@ c = conn.cursor()
 
 # main df of info.
 plant_df = pd.read_sql_query("SELECT * FROM plant_raw_data", conn)
-# print(plant_df.head(3))
-
 
 # For the scatter plots
 df_plotting = pd.read_sql_query("SELECT * FROM plotting", conn)
-# print(df_plotting.head(3))
-
 
 # plant images paths.
 image_df = pd.read_sql_query("SELECT * FROM plant_images", conn)
-# print(image_df.head(3))
 
 # cosine_similarity matrix.
 c.execute("SELECT * FROM cosine_sim")
 raw_cosine_sim = c.fetchall()
 cosine_sim = np.asarray(json.loads(raw_cosine_sim[0][1]))
-# print(cosine_sim)
-
 
 # Finally...
 c.close()
@@ -86,90 +175,131 @@ c.close()
 ################## data preprocessing ##################
 
 # for the search dropdown callback.
-
-# Old version - works but can't search common names as well.
-# plant_search_options = [{"label": x, "value": x}
-#                         for x in list(plant_df["Plant_Name"])]
-
-
+# Allows a user to search both the latin and common names.
 common_names = list(plant_df["Common_Names"])
 common_names_fixed = [names.replace(",", ", ") for names in common_names]
 
+# taking only first 5 common names as otherwise too many and lines overlap...
 common_names_show = []
 for names in common_names_fixed:
-    first_few_names = names.split(",")[0:5]
+    first_few_names = names.split(",")[0:3]
     common_names_show.append(",".join(first_few_names))
 
-# New version, allows for searching of any common name too.
-# Not the prettiest presenation though.
-# Set alphabetical order for dropdown.
+# Create a dict of latin names and selected common_names.
+intermed_dict = {}
+for latin_name, common_names in zip(list(plant_df["Plant_Name"]), common_names_show):
+    intermed_dict.update({latin_name: common_names})
 
+#  dict in alphabetical order.
+sorted_dict = {key: value for key, value in sorted(intermed_dict.items())}
+sorted_dict
+
+# format for dash
 plant_search_options = []
-for plant, plant_common_names in zip(list(plant_df["Plant_Name"]), common_names_show):
+for latin_name, plant_common_names in sorted_dict.items():
     plant_search_options.append(
-        {"label": str(plant + ", Commonly known as: " + plant_common_names),
-         "value": plant}
+        {"label": str(latin_name + ", Commonly known as: " + plant_common_names),
+         "value": latin_name}
     )
 
 
 ################## App layout ##################
 
-app.layout = dbc.Container([
+# Banner part of page - same for all webpages.
+page_banner = [
 
     dbc.Row([
         dbc.Col([
             html.H2("Houseplant Recommender",
-                    className="display-4", style={'color': "tertiary"}),
-        ]),
+                    className="display-4 text-primary"),
+        ], xs=8, sm=8, md=6, lg=4, xl=4),
 
-    ], style={"background-color": "primary"}),
+        dbc.Col([
+            dbc.Nav(
+                [
+                    dbc.NavLink("Generate Recommendations", href="/", active="exact",
+                                style={"font-size": "22px"}),
+                    dbc.NavLink("Visualise How all Plants Compare",
+                                href="/comparisons", active="exact", style={"font-size": "22px"}),
+                    dbc.NavLink("FAQs", href="/FAQs", active="exact",
+                                style={"font-size": "22px"}),
+                ],
+                pills=True,
+            ),
+        ], xs=8, sm=8, md=8, lg=8, xl=8),  # className="mr-auto"
+    ], style=banner_color),
+
 
     dbc.Row([
-        html.P(subtitle_text, className="lead"),
+        html.P(subtitle_text, className="lead text-primary"),
         html.Hr(style=hr_styles["v2"]),
         html.Br(), html.Br(),
-    ], style={"background-color": "secondary"}),
+    ], style=banner_color),
+]
 
 
-    # Row1 - title + FAQ + Github link.
-    dbc.Row([
-        dbc.Col([
-            html.H1("House Plant Recommender",
-                    className="text-center text-primary mb-4"),
-            html.H5(subtitle_text, className="text-center text-primary mb-4")
+# blank content with central layout defined by the callbacks.
+content = html.Div(id="page-content", children=[], style=content_style)
 
-        ], width=12),
-    ]),
+app.layout = dbc.Container([
+    dcc.Location(id="url"),
+    content
+], fluid=True)
 
+
+# Landing page with recommendations made.
+recommend_page = [
+    page_banner[0],
+    page_banner[1],
+    html.Br(),
 
     # Row2 - enter plant name.
     dbc.Row([
         dbc.Col([
-            html.H5("Select the plant(s) you want to Generate Recommendations from"),
-            html.P(dropdown_explain_text),
+            html.H3("Select the plant(s) that you want to generate your recommendations from",
+                className="text-center text-primary mb-4"),
+            dropdown_explain_text,
             dcc.Dropdown(
                 id="dropdown-plant-select", multi=True, clearable=True,
                 options=plant_search_options, placeholder=placeholder_text,
                 value="Plerandra elegantissima",
             ),
-        ], xs=12, sm=12, md=8, lg=6, xl=6,  style={"justify-content": "left"}, className="mb-2"),
+        ], xs=12, sm=12, md=8, lg=8, xl=6,  style={"justify-content": "left"}, className="mb-2"),
 
         dbc.Col(dbc.Card([], id="plant_card_p1",
                          color="primary", outline=True),
-                xs=12, sm=12, md=4, lg=3, xl=3, className="mb-2"),
+                xs=12, sm=12, md=4, lg=4, xl=3, className="mb-2"),
 
         dbc.Col(dbc.Card([], id="plant_card_p2",
                          color="primary", outline=True),
-                xs=12, sm=12, md=6, lg=3, xl=3, className="mb-2"),
+                xs=12, sm=12, md=6, lg=4, xl=3, className="mb-2"),
 
+    ]),
+
+    # Row.
+    dbc.Row([
+        html.Br(), html.Br(),
+        dbc.Button(info_button_text, color="info",
+                   id="recommend-help-button", block=True),
+        dbc.Modal(
+            [
+                dbc.ModalHeader("Header"),
+                dbc.ModalBody("This is the content of the modal"),
+                dbc.ModalFooter(
+                    dbc.Button(
+                        "Close", id="close", className="ms-auto", n_clicks=0
+                    )
+                ),
+            ],
+            id="modal",
+            is_open=False,
+        ),
     ]),
 
     # Row4
     dbc.Row([
         html.Hr(style=hr_styles["v2"]),
     ]),
-
-
 
     # Row4 - Subtitle for recommendations
     dbc.Row([
@@ -191,7 +321,6 @@ app.layout = dbc.Container([
     # low sunlight requirements
     # flowers
     # gives fruits.
-
 
     # Row6 - recommendations, 1st row.
     #
@@ -224,7 +353,13 @@ app.layout = dbc.Container([
         html.Br()
     ]),
 
+]
 
+# Compare each plant on a scatter plot.
+comparisons_page = [
+    page_banner[0],
+    page_banner[1],
+    html.Br(),
 
     # New row - dialog buttons to control the scatter plot.
     dbc.Row([
@@ -254,8 +389,6 @@ app.layout = dbc.Container([
         ], className="mb-2"),
     ]),
 
-
-
     # Row3 -
     dbc.Row([
 
@@ -270,7 +403,7 @@ app.layout = dbc.Container([
         ], xs=12, sm=12, md=12, lg=8, xl=8, className="mb-2"),
 
         dbc.Col([
-            dbc.Card(id="rent-info-card",
+            dbc.Card(id="scatter-info-card",
                 children=[
                     dbc.CardBody([
                         html.H5("Select a houseplant and this box will become populated!",
@@ -285,22 +418,104 @@ app.layout = dbc.Container([
         ], xs=12, sm=12, md=12, lg=4, xl=4, className="mb-2"),
 
     ]),
+]
 
 
-
-
-
-
-
-
-], fluid=True)
+# FAQs page...
+faqs_page = [
+    page_banner[0],
+    page_banner[1],
+    html.Br(),
+    html.H4("Frequently asked questions (FAQs)",
+            style={"textAlign": "center"}),
+    html.Hr(style=hr_styles["v2"]),
+    dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    html.H5(faq_title_1),
+                    html.Hr(style=hr_styles["v3"]),
+                    html.P(faq_text_1),
+                ]),
+            ], color="primary", outline=True),
+            ], width=12, className="mb-2"),
+    dbc.Col([
+        dbc.Card([
+            dbc.CardBody([
+                html.H5(faq_title_2),
+                html.Hr(style=hr_styles["v3"]),
+                html.P(faq_text_2),
+            ]),
+        ], color="primary", outline=True),
+    ], width=12, className="mb-2"),
+    dbc.Col([
+        dbc.Card([
+            dbc.CardBody([
+                html.H5(faq_title_3),
+                html.Hr(style=hr_styles["v3"]),
+                html.P(faq_text_3),
+            ]),
+        ], color="primary", outline=True),
+    ], width=12, className="mb-2"),
+    dbc.Col([
+        dbc.Card([
+            dbc.CardBody([
+                html.H5(faq_title_4),
+                html.Hr(style=hr_styles["v3"]),
+                html.P(faq_text_4),
+            ]),
+        ], color="primary", outline=True),
+    ], width=12, className="mb-2"),
+    dbc.Col([
+        dbc.Card([
+            dbc.CardBody([
+                html.H5(faq_title_5),
+                html.Hr(style=hr_styles["v3"]),
+                html.P(faq_text_5),
+            ]),
+        ], color="primary", outline=True),
+    ], width=12, className="mb-2"),
+    dbc.Col([
+        dbc.Card([
+            dbc.CardBody([
+                html.H5(faq_title_6),
+                html.Hr(style=hr_styles["v3"]),
+                html.P(faq_text_6),
+            ]),
+        ], color="primary", outline=True),
+    ], width=12, className="mb-2"),
+]
 
 
 ##################  Callbacks ##################
 
 
-# # dropdown-plant-select
-@app.callback(
+# Page navigation.
+@ app.callback(
+    Output("page-content", "children"),
+    Input("url", "pathname")
+)
+def define_location(pathname):
+    """Callback to move user to the correct page."""
+    if pathname == "/":
+        return recommend_page
+
+    elif pathname == "/comparisons":
+        return comparisons_page
+
+    elif pathname == "/FAQs":
+        return faqs_page
+
+    # If the user tries to reach a different page, return a 404 message
+    else:
+        return dbc.Jumbotron([
+            html.H1("404: Not found", className="text-danger"),
+            html.Hr(style=hr_styles["v1"]),
+            html.P(f"The pathname {pathname} was not recognised..."),
+        ])
+
+
+# upgrade dropdown.
+@ app.callback(
     dash.dependencies.Output("dropdown-plant-select", "options"),
     [dash.dependencies.Input("dropdown-plant-select", "search_value")],
     [dash.dependencies.State("dropdown-plant-select", "value")],
@@ -317,7 +532,20 @@ def dynamic_dropdown_options(search_value, value):
     return [o for o in plant_search_options if search_value.upper() in o["label"].upper() or o["value"] in (value or [])]
 
 
+# help popup modal - modulate open vs closed status.
 @app.callback(
+    Output("modal", "is_open"),
+    [Input("recommend-help-button", "n_clicks"), Input("close", "n_clicks")],
+    [State("modal", "is_open")],
+)
+def toggle_modal(n1, n2, is_open):
+    if n1 or n2:
+        return not is_open
+    return is_open
+
+
+# Info card for last selected plant.
+@ app.callback(
     [Output("plant_card_p1", "children"),
      Output("plant_card_p2", "children")],
     Input("dropdown-plant-select", "value"),
@@ -419,57 +647,50 @@ def give_recommendations(plant_selection):
     all_card_content = []
     for idx, plant_details in enumerate(all_plant_details):
         card_content = [
-            dbc.Button(
-                f"Number {(idx + 1)}: {top_plants[idx]}", color="primary", className="me-1"),
-            dbc.CardImg(src=plant_details['image_path']),
+            dbc.Card([
+                dbc.Button(
+                    f"Number {(idx + 1)}: {top_plants[idx]}", color="primary", className="card-title text-center"),
+                dbc.CardImg(src=plant_details['image_path']),
+
+                dbc.CardBody([
+                    html.P(f"Image obtained from: {plant_details['image_source']}",
+                           className="card-text text-right font-italic"),
+                    html.P(
+                        f"Commonly known as: {plant_details['common_names']}",
+                        className="card-text"),
+                ]),
+            ], style={"border": "none", "outline": "none"},),
+
             dbc.CardBody([
-                html.P(f"Image obtained from: {plant_details['image_source']}",
-                       className="card-text text-right font-italic"),
-                html.P(
-                    f"Commonly known as: {plant_details['common_names']}",
-                    className="card-text"),
+                dbc.ListGroup([
+                    dbc.Button("Plant Details",
+                               color="primary",
+                               className="card-title text-center",
+                               ),
+                    dbc.ListGroupItem(
+                        f"Maintenance: {plant_details['maintenance']}"),
+                    dbc.ListGroupItem(
+                        f"Sunlight Requirements: {plant_details['sunlight']}"),
+                    dbc.ListGroupItem(
+                        f"Watering Requirements: {plant_details['watering']}"),
+                    dbc.ListGroupItem(
+                        f"Type of Plant: {plant_details['types']}"),
+                    dbc.ListGroupItem(
+                        f"Height Range: {plant_details['heights']}"),
+                    dbc.ListGroupItem(
+                        f"Spread Range: {plant_details['spreads']}"),
+                    dbc.ListGroupItem(f"Zones: {plant_details['zones']}"),
+                    dbc.ListGroupItem(
+                        f"Flowers: {plant_details['flowers']}"),
+                    dbc.ListGroupItem(
+                        f"Fruits: {plant_details['fruits']}"),
+                ], className="card-text", flush=True),
             ]),
-
-
-            dbc.CardBody(
-                [
-                    html.H5("Plant Details", className="card-title text-center"),
-                    dbc.ListGroup([
-                        dbc.Button("Click",
-                                   id="click-target",
-                                   color="danger",
-                                   className="me-1",
-                                   n_clicks=0,
-                                   ),
-                        dbc.ListGroupItem(
-                            f"Maintenance: {plant_details['maintenance']}"),
-
-                        dbc.ListGroupItem(
-                            f"Sunlight Requirements: {plant_details['sunlight']}"),
-                        dbc.ListGroupItem(
-                            f"Watering Requirements: {plant_details['watering']}"),
-                        dbc.ListGroupItem(
-                            f"Type of Plant: {plant_details['types']}"),
-                        dbc.ListGroupItem(
-                            f"Height Range: {plant_details['heights']}"),
-                        dbc.ListGroupItem(
-                            f"Spread Range: {plant_details['spreads']}"),
-                        dbc.ListGroupItem(f"Zones: {plant_details['zones']}"),
-                        dbc.ListGroupItem(
-                            f"Flowers: {plant_details['flowers']}"),
-                        dbc.ListGroupItem(
-                            f"Fruits: {plant_details['fruits']}"),
-                    ], className="card-text", flush=True),
-                ]
-            ),
         ]
 
         all_card_content.append(card_content)
 
     return all_card_content
-
-
-#
 
 
 # Update scatter graph callback
@@ -514,8 +735,27 @@ def gen_scatter_plot(axes_choice):
     return fig
 
 
-# Update Main info cards.
-# "rent-info-card"
+# Callbacks for
+
+
+# Update Info card generated for the scatter graph Main info cards.
+@app.callback(
+    Output("scatter-info-card", "children"),
+    Input("scatter-graph", "clickData"),
+    prevent_initial_call=True  # because I am reliant on a user click.
+)
+def get_card(clickData):
+    """Rent card callback"""
+    if clickData is not None:
+        plant_name = clickData["points"][0]["text"]
+
+        plant_details = utils.get_plant_details(
+            plant_name=plant_name, plant_df=plant_df, image_df=image_df)
+
+        card_content = [
+        ]
+
+    return card_content
 
 
 ################## End of app ##################
