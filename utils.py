@@ -55,6 +55,56 @@ def get_plant_details(plant_name: str, plant_df: pd.DataFrame, image_df: pd.Data
     return plant_details
 
 
+def get_sim_opp_plant_names(selected_plant: str, plotting_df: pd.DataFrame, axes_choice: str) -> list:
+    """
+    Obtain the names of the three most similar and three most different plants
+    according to the plant currently selected. As this works with the scatter graph
+    selection, the similarity is based on the proximty of the scatter points.
+
+    TODO - add labelling.
+    """
+
+    if axes_choice == "tsne_all":
+        df = plotting_df[["Plant_Name", "all_tsne_1", "all_tsne_2"]]
+        df.columns = ["Plant_Name", "x", "y"]
+
+    elif axes_choice == "sunlight_water":
+        df = plotting_df[["Plant_Name",
+                          "Watering_jittered", "Sunlight_jittered"]]
+        df.columns = ["Plant_Name", "x", "y"]
+
+    else:
+        df = plotting_df[[
+            "Plant_Name", "Max_Spread_Capped_jittered", "Max_Height_Capped_jittered"]]
+        df.columns = ["Plant_Name", "x", "y"]
+
+    # determine values for the plant target.
+    target_index = df.loc[df["Plant_Name"] == selected_plant].index.values[0]
+    x_target = df.loc[df["Plant_Name"] == selected_plant]["x"].values[0]
+    y_target = df.loc[df["Plant_Name"] == selected_plant]["y"].values[0]
+
+    # determine magnitude of diff for each plant and find the smallest and largest.
+    diffs = abs(df["x"] - x_target) + abs(df["y"] - y_target)
+    # taking 4 as searched plant will be one of them...
+    most_similar = diffs.nsmallest(n=4).index.values
+    most_different = diffs.nlargest(n=3).index.values
+
+    # Couting to deals with possible issue that the target plant may not shown up here
+    # (if several have a delta of 0).
+    i = 0
+    similar_names = []
+    for idx in most_similar:
+        if idx != target_index:
+            i = + 1
+            similar_names.append(df.iloc[idx]["Plant_Name"])
+        if i == 3:
+            break
+
+    different_names = [df.iloc[idx]["Plant_Name"] for idx in most_different]
+
+    return similar_names + different_names
+
+
 def recommend_plants(plant_df: pd.DataFrame, plants_selected: Union[str, list], cosine_sim: np.ndarray) -> list:
     """
     Recommend the top 6 most similar plants to a single or multiple plants.
