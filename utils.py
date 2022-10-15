@@ -1,6 +1,17 @@
 """
-Functions to support the main Dash application.
+Functions to support the main Dash application in app.py
 
+1. get_plant_details(plant_name, plant_df, image_df)
+    Given a plant name, return details about the plant.
+
+2. get_sim_opp_plant_names(selected_plant, plotting_df, axes_choice)
+    Obtain the names of the three most similar and three most different plants.
+
+3. recommend_plants(plant_df, plants_selected, cosine_sim)
+    Recommend the top 6 most similar plants given 1 or multiple plants.
+
+4. _plant_recommend_scores(plant_df, plant_name, cosine_sim)
+    Determine the recommendation scores for a single plant.
 """
 from typing import Tuple, Union
 import numpy as np
@@ -18,10 +29,10 @@ def get_plant_details(plant_name: str, plant_df: pd.DataFrame, image_df: pd.Data
         Plant to extract info for.
 
     plant_df: pd.DataFrame
-        Contains info about each plant
+        Contains basic info about each plant (e.g. sunlight, watering etc..)
 
     image_df : pd.DataFrame
-        Contains info about image locations for each plant.
+        Contains image paths and sources for each plant.
 
     Returns
     ----------
@@ -61,7 +72,21 @@ def get_sim_opp_plant_names(selected_plant: str, plotting_df: pd.DataFrame, axes
     according to the plant currently selected. As this works with the scatter graph
     selection, the similarity is based on the proximty of the scatter points.
 
-    TODO - add labelling.
+    Parameters
+    ----------
+    plant_name: str
+        Plant clicked on by user to extract info from.
+
+    plotting_df: pd.DataFrame
+        Contains axis values for the possible scatter plots that can be made.
+
+    axes_choice: str
+        What are the x and y axes currently in use by the scatter plot.
+
+    Returns
+    ----------
+    list[str]
+        6 Plant names, first 3 are most similar plants, last 3 are most different.
     """
 
     if axes_choice == "tsne_all":
@@ -89,8 +114,8 @@ def get_sim_opp_plant_names(selected_plant: str, plotting_df: pd.DataFrame, axes
     most_similar = diffs.nsmallest(n=4).index.values
     most_different = diffs.nlargest(n=3).index.values
 
-    # Couting to deals with possible issue that the target plant may not shown up here
-    # (if several have a delta of 0).
+    # Counting deals with possible issue that the target plant may not be one of the top 4 plants
+    # (if several plants have a delta of 0).
     i = 0
     similar_names = []
     for idx in most_similar:
@@ -107,7 +132,7 @@ def get_sim_opp_plant_names(selected_plant: str, plotting_df: pd.DataFrame, axes
 
 def recommend_plants(plant_df: pd.DataFrame, plants_selected: Union[str, list], cosine_sim: np.ndarray) -> list:
     """
-    Recommend the top 6 most similar plants to a single or multiple plants.
+    Recommend the top 6 most similar plants given 1 or multiple plants.
     Similarity determined by the cosine_similarity (pre-determined).
 
     In the case of multiple plants to search against, each plant is weighted equally.
@@ -115,7 +140,7 @@ def recommend_plants(plant_df: pd.DataFrame, plants_selected: Union[str, list], 
     Parameters
     ----------
     plant_df : pd.DataFrame
-        Contains info about each plant
+        Contains basic info about each plant (e.g. sunlight, watering etc..)
 
     plants_selected: Union[str, list]
         String (for single plant) or list (for multiple plants) of plant name(s) to make
@@ -126,7 +151,7 @@ def recommend_plants(plant_df: pd.DataFrame, plants_selected: Union[str, list], 
 
     Returns
     ----------
-    list
+    list[str]
         Top 6 most similar plants ordered by their scores.
     """
 
@@ -135,7 +160,7 @@ def recommend_plants(plant_df: pd.DataFrame, plants_selected: Union[str, list], 
         search_idx, total_scores = _plant_recommend_scores(
             plant_df=plant_df, plant_name=plants_selected, cosine_sim=cosine_sim)
 
-        # remove the plant that was searched from the results
+        # remove the plant that was used in the search from the results
         total_scores.pop(search_idx)
 
     # multiple plants to search.
@@ -149,7 +174,8 @@ def recommend_plants(plant_df: pd.DataFrame, plants_selected: Union[str, list], 
             search_idxs.append(search_idx)
             results.append(result)
 
-        # sum each score for each plant searched and make combined score of same format as single search.
+        # sum each score for each plant searched and make a combined score of
+        # the same format as single search.
         total_scores = {}
         for key in results[0].keys():
 
@@ -162,11 +188,11 @@ def recommend_plants(plant_df: pd.DataFrame, plants_selected: Union[str, list], 
         total_scores = {k: v for k, v in sorted(
             total_scores.items(), key=lambda item: item[1], reverse=True)}
 
-        # remove the plant that was searched for from the results
+        # remove the plants that were searched for from the results
         for search_idx in search_idxs:
             total_scores.pop(search_idx)
 
-    # convert from index and score to Plant Name
+    # convert from index and score to plant names.
     top_plants = []
     for idx, (k, v) in enumerate(total_scores.items()):
         if idx == 6:
@@ -197,7 +223,7 @@ def _plant_recommend_scores(plant_df: pd.DataFrame, plant_name: str, cosine_sim:
     int
         Index of the plant that is being searched.
 
-    dict
+    dict[int, float]
         Keys are the plant index and values are their score.
     """
     search_idx = plant_df.loc[plant_df["Plant_Name"] == plant_name].index[0]
